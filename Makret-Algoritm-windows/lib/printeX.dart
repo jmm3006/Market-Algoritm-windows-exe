@@ -21,28 +21,26 @@ class PrinterPage extends StatefulWidget {
 class _PrinterPageState extends State<PrinterPage> {
   String _printStatus = 'Idle';
   final TextEditingController _textController = TextEditingController();
-  final TextEditingController _searchController = TextEditingController(); // Controller for search input
+  final TextEditingController _searchController = TextEditingController();
   List<bool> _selectedItems = [];
-  List<Map<String, dynamic>> _filteredHistories = []; // List to hold filtered histories
+  List<Map<String, dynamic>> _filteredHistories = [];
   bool _isPrinterAvailable = false;
   static const platform = MethodChannel('com.example.app/printer');
-  int checkNumber = 3881; // Initial check number
+  int checkNumber = 3881;
 
   @override
   void initState() {
     super.initState();
-    _filteredHistories = List.from(widget.histories); // Initialize filtered list with all histories
+    _filteredHistories = List.from(widget.histories);
     _selectedItems = List<bool>.filled(widget.histories.length, false);
     _checkPrinterAvailability();
-
-    // Add listener to search controller to filter histories
     _searchController.addListener(_filterHistories);
   }
 
   @override
   void dispose() {
     _textController.dispose();
-    _searchController.dispose(); // Dispose search controller
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -53,7 +51,6 @@ class _PrinterPageState extends State<PrinterPage> {
         final name = (item['name'] ?? '').toString().toLowerCase();
         return name.contains(query);
       }).toList();
-      // Reset selected items for the new filtered list
       _selectedItems = List<bool>.filled(_filteredHistories.length, false);
     });
   }
@@ -82,10 +79,8 @@ class _PrinterPageState extends State<PrinterPage> {
     }
 
     List<Map<String, dynamic>> selectedHistories = [];
-    // Iterate over the original histories to get selected items, as _selectedItems refers to the filtered list's indices
     for (int i = 0; i < _selectedItems.length; i++) {
       if (_selectedItems[i]) {
-        // Find the corresponding item in the original histories list
         selectedHistories.add(_filteredHistories[i]);
       }
     }
@@ -97,45 +92,29 @@ class _PrinterPageState extends State<PrinterPage> {
       return;
     }
 
-    // --- START: Mandatory comment check for printing ---
     if (_textController.text.isEmpty) {
       setState(() {
-        _printStatus = 'Iltimos, chop etish uchun izoh kiriting. Izoh majburiy.'; // Added mandatory message
+        _printStatus = 'Iltimos, chop etish uchun izoh kiriting. Izoh majburiy.';
       });
       return;
     }
-    // --- END: Mandatory comment check for printing ---
 
     try {
       final profile = await esc_pos.CapabilityProfile.load();
       final generator = esc_pos.Generator(esc_pos.PaperSize.mm58, profile);
 
-      // --- Load your logo here (if needed for thermal printer) ---
-      // final ByteData logoBytes = await rootBundle.load('assets/logo.png'); // Example path
-      // final Uint8List logoPng = logoBytes.buffer.asUint8List();
-      // final esc_pos.Image logoBitmap = esc_pos.Image(img.decodeImage(logoPng)!);
-      // --- End of logo loading ---
-
       for (var item in selectedHistories) {
         List<int> bytes = [];
-
         String formattedDateTime = 'N/A';
         if (item['sana_vaqt'] != null) {
           DateTime? originalDateTime = DateTime.tryParse(item['sana_vaqt'].toString());
           if (originalDateTime != null) {
-            // Adjust for +5 hours (Tashkent time) if your data is in UTC or a different timezone
             DateTime adjustedDateTime = originalDateTime.add(const Duration(hours: 5));
             formattedDateTime = DateFormat('dd.MM.yyyy HH:mm').format(adjustedDateTime);
           } else {
             formattedDateTime = item['sana_vaqt'].toString();
           }
         }
-
-        // Add logo (uncomment and use if you have a logo loaded)
-        // if (logoBitmap != null) {
-        //   bytes += generator.image(logoBitmap);
-        //   bytes += generator.feed(1);
-        // }
 
         bytes += generator.text('ALGORITM',
             styles: const esc_pos.PosStyles(
@@ -147,50 +126,43 @@ class _PrinterPageState extends State<PrinterPage> {
             ));
         bytes += generator.text('-----------------------------',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center));
-
-        // For thermal printing, you need to manually handle bolding for labels if fontType.fontB isn't enough
-        bytes += generator.text('Чек рақами: No.${checkNumber}', // Cyrillic and bold
+        bytes += generator.text('Чек рақами: No.${checkNumber}',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Компания: Algoritm Group', // Cyrillic and bold
+        bytes += generator.text('Компания: Algoritm Group',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Маҳсулот: ${item['name'] ?? 'N/A'}', // Cyrillic and bold
+        bytes += generator.text('Маҳсулот: ${item['name'] ?? 'N/A'}',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Нарх: ${item['price'] ?? 0} som', // Cyrillic and bold
+        bytes += generator.text('Нарх: ${item['price'] ?? 0} som',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Тўлов суммаси: ${item['summa'] ?? 0} som', // Cyrillic and bold
+        bytes += generator.text('Тўлов суммаси: ${item['summa'] ?? 0} som',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Кассир: Rajabova Asem', // Cyrillic and bold
+        bytes += generator.text('Кассир: Rajabova Asem',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Вақт: $formattedDateTime', // Cyrillic and bold
+        bytes += generator.text('Вақт: $formattedDateTime',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('телефон рақами: +998905908445', // Cyrillic and bold
+        bytes += generator.text('телефон рақами: +998905908445',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-
-        // Only include user-entered comment from _textController.text for thermal printer
-        // Now it's guaranteed to be non-empty due to the check above
-        bytes += generator.text('Изоҳ: ${_textController.text}', // Cyrillic and bold comment
+        bytes += generator.text('Изоҳ: ${_textController.text}',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-
         bytes += generator.text('-----------------------------',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center));
-        bytes += generator.text('Квитанцияни сақланг', // Cyrillic and bold
+        bytes += generator.text('Квитанцияни сақланг',
             styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center, bold: true, fontType: esc_pos.PosFontType.fontB));
         bytes += generator.feed(2);
         bytes += generator.cut();
 
         await platform.invokeMethod('printData', {'data': bytes});
-        checkNumber++; // Increment check number for each printed receipt
+        checkNumber++;
       }
 
       setState(() {
-        _printStatus = 'Chop etish muvaffakiyatli amalga oshirildi!'; // Cyrillic
-        // After printing, reset selected items and filter
+        _printStatus = 'Chop etish muvaffakiyatli amalga oshirildi!';
         _selectedItems = List<bool>.filled(_filteredHistories.length, false);
-        _filterHistories(); // Re-filter to update the list if search query is active
+        _filterHistories();
       });
     } catch (e) {
       setState(() {
-        _printStatus = 'Chop etish muwaffakiyatsiz tugadi: $e'; // Cyrillic
+        _printStatus = 'Chop etish muwaffakiyatsiz tugadi: $e';
       });
       print('Chop etishda xato: $e');
     }
@@ -199,14 +171,14 @@ class _PrinterPageState extends State<PrinterPage> {
   Future<void> _printCustomText() async {
     if (!_isPrinterAvailable) {
       setState(() {
-        _printStatus = 'Printer mavjud emas. Avval printerni ulanishini ta\'minlash.'; // Cyrillic
+        _printStatus = 'Printer mavjud emas. Avval printerni ulanishini ta\'minlash.';
       });
       return;
     }
 
     if (_textController.text.isEmpty) {
       setState(() {
-        _printStatus = 'Iltimos, chop etish uchun matn kiriting.'; // Cyrillic
+        _printStatus = 'Iltimos, chop etish uchun matn kiriting.';
       });
       return;
     }
@@ -224,12 +196,12 @@ class _PrinterPageState extends State<PrinterPage> {
       await platform.invokeMethod('printData', {'data': bytes});
 
       setState(() {
-        _printStatus = 'Maxsus matn muvaffakiyatli chop etildi!'; // Cyrillic
+        _printStatus = 'Maxsus matn muvaffakiyatli chop etildi!';
         _textController.clear();
       });
     } catch (e) {
       setState(() {
-        _printStatus = 'Maxsus matni chop etish muvaffakiyatsiz tugadi: $e'; // Cyrillic
+        _printStatus = 'Maxsus matni chop etish muvaffakiyatsiz tugadi: $e';
       });
     }
   }
@@ -237,51 +209,41 @@ class _PrinterPageState extends State<PrinterPage> {
   Future<void> _generateAndSavePdf(List<Map<String, dynamic>> dataToPrint) async {
     if (dataToPrint.isEmpty) {
       setState(() {
-        _printStatus = 'Iltimos, PDF uchun kamida bitta tarixiy elementni tanlash.'; // Cyrillic
+        _printStatus = 'Iltimos, PDF uchun kamida bitta tarixiy elementni tanlash.';
       });
       return;
     }
 
-    // --- START: Mandatory comment check for PDF generation ---
     if (_textController.text.isEmpty) {
       setState(() {
-        _printStatus = 'Iltimos, PDF yaratish uchun izoh kiriting. Izoh majburiy.'; // Added mandatory message
+        _printStatus = 'Iltimos, PDF yaratish uchun izoh kiriting. Izoh majburiy.';
       });
       return;
     }
-    // --- END: Mandatory comment check for PDF generation ---
 
     final pdf = pw.Document();
     const double mmToPoint = 2.83465;
     const double pageWidthMm = 58.0;
-    const double pageHeightMm = 150.0; // Adjust as needed, will expand if content is long
+    const double pageHeightMm = 150.0;
 
     pw.Font ttf;
     try {
-      // Load the font from your assets. Ensure this path is correct and the font supports Cyrillic.
       final fontData = await DefaultAssetBundle.of(context).load('assets/fonts/CharisSILB.ttf');
       ttf = pw.Font.ttf(fontData);
     } catch (e) {
       setState(() {
-        _printStatus = 'PDF uchun shrift yuklashda xato: $e. Shrift tugri zhoylashganligini va pubspec.yaml yes ku shaxsiyligini.'; // Cyrillic
+        _printStatus = 'PDF uchun shrift yuklashda xato: $e. Shrift tugri joylashganligini va pubspec.yamlni tekshiring.';
       });
       print('PDF font loading error: $e');
-      return; // Exit if font loading fails
+      return;
     }
-
-
-    // --- Load logo for PDF (if needed) ---
-    // final ByteData logoBytes = await rootBundle.load('assets/logo.png'); // Example path
-    // final Uint8List logoPng = logoBytes.buffer.asUint8List();
-    // final pw.MemoryImage pdfLogoImage = pw.MemoryImage(logoPng);
-    // --- End of logo loading ---
 
     for (var item in dataToPrint) {
       String formattedDateTime = 'N/A';
       if (item['sana_vaqt'] != null) {
         DateTime? originalDateTime = DateTime.tryParse(item['sana_vaqt'].toString());
         if (originalDateTime != null) {
-          DateTime adjustedDateTime = originalDateTime.add(const Duration(hours: 5)); // Adjust for +5 hours
+          DateTime adjustedDateTime = originalDateTime.add(const Duration(hours: 5));
           formattedDateTime = DateFormat('dd.MM.yyyy HH:mm').format(adjustedDateTime);
         } else {
           formattedDateTime = item['sana_vaqt'].toString();
@@ -290,134 +252,98 @@ class _PrinterPageState extends State<PrinterPage> {
 
       pdf.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat(
-            pageWidthMm * mmToPoint,
-            pageHeightMm * mmToPoint,
-          ),
-          margin: const pw.EdgeInsets.all(5 * mmToPoint), // Smaller margins for 58mm
+          pageFormat: PdfPageFormat(pageWidthMm * mmToPoint, pageHeightMm * mmToPoint),
+          margin: const pw.EdgeInsets.all(5 * mmToPoint),
           build: (pw.Context context) {
-            // Decide what to show for "Izoh"
-            pw.Widget commentSection;
-            // Now it's guaranteed to be non-empty due to the check above
-            commentSection = pw.Column(
+            pw.Widget commentSection = pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Divider(), // Add a divider before comment if it exists
+                pw.Divider(),
                 pw.Text(
-                  'Изоҳ: ${_textController.text}', // Cyrillic label, bold for text
-                  style: pw.TextStyle(font: ttf, fontSize: 9, fontWeight: pw.FontWeight.bold), // Bold comment
+                  'Изоҳ: ${_textController.text}',
+                  style: pw.TextStyle(font: ttf, fontSize: 9, fontWeight: pw.FontWeight.bold),
                 ),
               ],
             );
 
-
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                // Add logo for PDF (uncomment if you have a logo)
-                // pw.Center(
-                //   child: pw.Image(pdfLogoImage, width: 200, height: 200),
-                // ),
-                pw.SizedBox(height: 5), // Smaller spacing
+                pw.SizedBox(height: 5),
                 pw.Center(
                   child: pw.Text(
                     'ALGORITM',
-                    style: pw.TextStyle(
-                      fontSize: 14, // Slightly smaller main title for neatness
-                      fontWeight: pw.FontWeight.bold,
-                      font: ttf, // Apply the Cyrillic-supporting font
-                    ),
+                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, font: ttf),
                   ),
                 ),
                 pw.Divider(),
-                pw.SizedBox(height: 5), // Smaller spacing
-                _buildPdfRow('Чек рақами:', 'No.${checkNumber}', ttf), // Cyrillic
-                _buildPdfRow('Компания:', 'Algoritm Group', ttf), // Cyrillic
-                _buildPdfRow('Маҳсулот:', item['name'] ?? 'N/A', ttf), // Cyrillic
-                _buildPdfRow('Нарх:', '${item['price'] ?? 0} som', ttf), // Cyrillic
-                _buildPdfRow('Тўлов суммаси:', '${item['summa'] ?? 0} som', ttf), // Cyrillic
-                _buildPdfRow('Кассир:', 'Rajabova Asem', ttf), // Cyrillic
-                _buildPdfRow('Вақт:', formattedDateTime, ttf), // Cyrillic
-                _buildPdfRow('телефон рақами:', '+998905908445', ttf), // Cyrillic
-
-                commentSection, // Insert the comment section (will be hidden if empty)
-
+                pw.SizedBox(height: 5),
+                _buildPdfRow('Чек рақами:', 'No.${checkNumber}', ttf),
+                _buildPdfRow('Компания:', 'Algoritm Group', ttf),
+                _buildPdfRow('Маҳсулот:', item['name'] ?? 'N/A', ttf),
+                _buildPdfRow('Нарх:', '${item['price'] ?? 0} som', ttf),
+                _buildPdfRow('Тўлов суммасi:', '${item['summa'] ?? 0} som', ttf),
+                _buildPdfRow('Кассир:', 'Rajabova Asem', ttf),
+                _buildPdfRow('Вақт:', formattedDateTime, ttf),
+                _buildPdfRow('телефон рақами:', '+998905908445', ttf),
+                commentSection,
                 pw.Divider(),
                 pw.Center(
                   child: pw.Text(
-                    'Квитанцияни сақланг', // Cyrillic
-                    style: pw.TextStyle(
-                      fontWeight: pw.FontWeight.bold,
-                      font: ttf, // Apply the font
-                      fontSize: 10, // Smaller font for "Kvitansiyani saqlang"
-                    ),
+                    'Квитанцияни сақланг',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf, fontSize: 10),
                   ),
                 ),
-                pw.SizedBox(height: 10), // Smaller spacing at the end
+                pw.SizedBox(height: 10),
               ],
             );
           },
         ),
       );
-      checkNumber++; // Increment check number for each PDF page
+      checkNumber++;
     }
 
     final output = await getTemporaryDirectory();
     final fileName = "chek_raport_${DateTime.now().millisecondsSinceEpoch}.pdf";
     final file = File("${output.path}/$fileName");
-
-    print('Attempting to save PDF to: ${file.path}'); // Debugging line
     await file.writeAsBytes(await pdf.save());
-    print('PDF saved successfully to: ${file.path}'); // Debugging line
 
     setState(() {
-      _printStatus = 'PDF muwaffakiyatli saqlandi: $fileName'; // Cyrillic
-      // After PDF generation, reset selected items and filter
+      _printStatus = 'PDF muwaffaqiyatli saqlandi: $fileName';
       _selectedItems = List<bool>.filled(_filteredHistories.length, false);
-      _filterHistories(); // Re-filter to update the list if search query is active
+      _filterHistories();
     });
 
     await OpenFilex.open(file.path);
   }
 
-  // Updated _buildPdfRow for better layout and consistent bolding
   pw.Widget _buildPdfRow(String label, String value, pw.Font font) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1), // Reduced vertical padding
+      padding: const pw.EdgeInsets.symmetric(vertical: 1),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: pw.CrossAxisAlignment.start, // Align top if content wraps
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          // Left side (label)
-          // Adjust width as needed for your 58mm printer.
-          // This width is in PDF points. 1mm = 2.83465 points.
-          // For example, 25mm * 2.83465 = 70.86 points for the label column.
           pw.SizedBox(
-            width: 25 * 2.83465, // Fixed width for label to prevent wrapping of label itself
+            width: 25 * 2.83465,
             child: pw.Text(
               '$label:',
-              style: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                font: font,
-                fontSize: 9, // Consistent smaller font size for labels
-              ),
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: font, fontSize: 9),
               textAlign: pw.TextAlign.left,
             ),
           ),
-          pw.SizedBox(width: 2 * 2.83465), // Small gap between label and value (2mm)
-          // Right side (value)
-          pw.Expanded( // Allows value to take remaining space and wrap
+          pw.SizedBox(width: 2 * 2.83465),
+          pw.Expanded(
             child: pw.Text(
               value,
-              style: pw.TextStyle(font: font, fontSize: 9), // Consistent smaller font size for values
-              textAlign: pw.TextAlign.right, // Align value to the right
+              style: pw.TextStyle(font: font, fontSize: 9),
+              textAlign: pw.TextAlign.right,
             ),
           ),
         ],
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -434,11 +360,7 @@ class _PrinterPageState extends State<PrinterPage> {
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            appBar: AppBar(
-              title: const Text('Printer'),
-              backgroundColor: Colors.blueAccent,
-              foregroundColor: Colors.white,
-            ),
+
             body: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -446,25 +368,25 @@ class _PrinterPageState extends State<PrinterPage> {
                 children: [
                   Card(
                     elevation: 4,
-                    margin: const EdgeInsets.only(bottom: 20),
+                    margin: const EdgeInsets.only(bottom: 10),
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(10.0),
                       child: Column(
                         children: [
                           const Text(
-                            'Chop uchun tarixiy mahsulotlarni tanlash (Ctrl + P bilan yozishlarni chop etish)', // Cyrillic
+                            'Chop uchun tarixiy mahsulotlarni tanlash (Ctrl + P bilan yozishlarni chop etish)',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 5),
                           Text(
                             _printStatus,
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 16,
-                              color: _printStatus.contains('muvaffaqiyatli') // Cyrillic
+                              fontSize: 14,
+                              color: _printStatus.contains('muvaffaqiyatli')
                                   ? Colors.green
-                                  : _printStatus.contains('xato') || _printStatus.contains('topilmadi') || _printStatus.contains('majburiy') // Cyrillic
+                                  : _printStatus.contains('xato') || _printStatus.contains('topilmadi') || _printStatus.contains('majburiy')
                                   ? Colors.red
                                   : Colors.blue,
                               fontWeight: FontWeight.bold,
@@ -474,13 +396,12 @@ class _PrinterPageState extends State<PrinterPage> {
                       ),
                     ),
                   ),
-                  // Search input field
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
+                    padding: const EdgeInsets.only(bottom: 10.0),
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        labelText: 'Mahsulot nomini qidirish', // Cyrillic
+                        labelText: 'Mahsulot nomini qidirish',
                         prefixIcon: const Icon(Icons.search),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -492,19 +413,22 @@ class _PrinterPageState extends State<PrinterPage> {
                   ),
                   Expanded(
                     child: ListView.builder(
-                      itemCount: _filteredHistories.length, // Use filtered list
+                      itemCount: _filteredHistories.length,
                       itemBuilder: (context, index) {
-                        final item = _filteredHistories[index]; // Use item from filtered list
+                        final item = _filteredHistories[index];
                         return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+                          margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 0),
                           elevation: 2,
+                          color: _selectedItems[index] ? Colors.blueAccent.withOpacity(0.1) : null,
                           child: CheckboxListTile(
                             title: Text(
-                              '${item['name'] ?? 'N/A'} - ${item['summa'] ?? 0} som',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              '${item['name'] ?? 'N/A'} - ${item['summa'] ?? 0} so‘m',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             ),
                             subtitle: Text(
-                                'Миқдор: ${item['quantity'] ?? 0}, Нарх: ${item['price'] ?? 0} som'), // Cyrillic
+                              'Миқдор: ${item['quantity'] ?? 0}, Нарх: ${item['price'] ?? 0} so‘m',
+                              style: const TextStyle(fontSize: 14, color: Colors.grey),
+                            ),
                             value: _selectedItems[index],
                             onChanged: (bool? value) {
                               setState(() {
@@ -512,16 +436,19 @@ class _PrinterPageState extends State<PrinterPage> {
                               });
                             },
                             activeColor: Colors.blueAccent,
+                            checkColor: Colors.white,
+                            tileColor: _selectedItems[index] ? Colors.blueAccent.withOpacity(0.1) : null,
+                            controlAffinity: ListTileControlAffinity.leading,
                           ),
                         );
                       },
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: _textController,
                     decoration: InputDecoration(
-                      labelText: 'Chop etish uchun izoh kiriting (Majburiy)', // Cyrillic - Updated label
+                      labelText: 'Chop etish uchun izoh kiriting (Majburiy)',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -530,18 +457,18 @@ class _PrinterPageState extends State<PrinterPage> {
                     ),
                     maxLines: 3,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: _printCustomText,
                           icon: const Icon(Icons.print),
-                          label: const Text('Mahsus matni chop etish'), // Cyrillic
+                          label: const Text('Mahsus matni chop etish'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blueAccent,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -553,11 +480,11 @@ class _PrinterPageState extends State<PrinterPage> {
                         child: ElevatedButton.icon(
                           onPressed: _printSelectedHistories,
                           icon: const Icon(Icons.receipt),
-                          label: const Text('Tanlanganlarni chop etish'), // Cyrillic
+                          label: const Text('Tanlanganlarni chop etish'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -572,24 +499,23 @@ class _PrinterPageState extends State<PrinterPage> {
                       List<Map<String, dynamic>> selectedHistories = [];
                       for (int i = 0; i < _selectedItems.length; i++) {
                         if (_selectedItems[i]) {
-                          selectedHistories.add(_filteredHistories[i]); // Use item from filtered list
+                          selectedHistories.add(_filteredHistories[i]);
                         }
                       }
-                      // The mandatory comment check is now inside _generateAndSavePdf
                       await _generateAndSavePdf(selectedHistories);
                     },
                     icon: const Icon(Icons.picture_as_pdf),
-                    label: const Text('Tanlanganlarni PDF qilib saqlang'), // Cyrillic
+                    label: const Text('Tanlanganlarni PDF qilib saqlang'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
                 ],
               ),
             ),
