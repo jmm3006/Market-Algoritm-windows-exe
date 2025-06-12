@@ -29,7 +29,7 @@ class _MyHomePageState extends State<MyHomePage> { // SingleTickerProviderStateM
 
   double _totalSelectedAmount = 0.0;
 
-  final String baseUrl = "https://script.google.com/macros/s/AKfycby7zLE2N3sdLq0k9ViR3cr_hcK-wFbGRVQRZL5cH_ENJCTfl5724Yh306LIye_jZhBd/exec";
+  final String baseUrl = "https://script.google.com/macros/s/AKfycbyJ42J9mnDKJzORf19pl0w8wgVVRzSwVOwXaUpQR1Mo6wV9-fpoRHq4Gz9Wa2xKMZ--/exec";
   String get marketsApiUrl => "$baseUrl?action=getMarkets";
   String get postHistoriesUrl => baseUrl;
   String get getHistoriesUrl => "$baseUrl?action=getHistories";
@@ -47,16 +47,6 @@ class _MyHomePageState extends State<MyHomePage> { // SingleTickerProviderStateM
     fetchHistories();
     _searchController.addListener(_onSearchChanged);
     _calculateTotalSelectedAmount();
-
-    // AnimationController va Animation initsializatsiyasi olib tashlandi
-    // _animationController = AnimationController(
-    //   vsync: this,
-    //   duration: const Duration(milliseconds: 300),
-    // );
-    // _animation = Tween<double>(begin: 0, end: -10).animate(_animationController)
-    //   ..addListener(() {
-    //     setState(() {});
-    //   });
   }
 
   @override
@@ -65,8 +55,6 @@ class _MyHomePageState extends State<MyHomePage> { // SingleTickerProviderStateM
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _commentController.dispose();
-    // AnimationController dispose chaqiruvi olib tashlandi
-    // _animationController.dispose();
     super.dispose();
   }
 

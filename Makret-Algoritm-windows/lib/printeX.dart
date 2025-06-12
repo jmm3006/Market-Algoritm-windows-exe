@@ -1,14 +1,16 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart' as esc_pos;
+import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
-import 'package:open_filex/open_filex.dart';
-import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+// Asosiy sahifa vidjeti
 class PrinterPage extends StatefulWidget {
   final List<Map<String, dynamic>> histories;
 
@@ -19,40 +21,65 @@ class PrinterPage extends StatefulWidget {
 }
 
 class _PrinterPageState extends State<PrinterPage> {
-  String _printStatus = 'Idle';
+  // Holat o'zgaruvchilari
+  String _printStatus = 'Тайёр'; // O'zbek kirillcha
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   List<bool> _selectedItems = [];
   List<Map<String, dynamic>> _filteredHistories = [];
   bool _isPrinterAvailable = false;
   static const platform = MethodChannel('com.example.app/printer');
-  int checkNumber = 3881;
+
+  // Modified line: Changed initial value to 338
+  int _checkNumber = 338;
+  static const String _kCheckNumberKey = 'newCheak';
+
+  String _previewText = 'Олдиндан кўриш учун маҳсулот танланг...'; // O'zbek kirillcha
 
   @override
   void initState() {
     super.initState();
     _filteredHistories = List.from(widget.histories);
-    _selectedItems = List<bool>.filled(widget.histories.length, false);
+    _selectedItems = List<bool>.filled(widget.histories.length, false, growable: true);
+    _loadCheckNumber();
     _checkPrinterAvailability();
     _searchController.addListener(_filterHistories);
+    _textController.addListener(_previewSelectedItems);
   }
 
   @override
   void dispose() {
+    _textController.removeListener(_previewSelectedItems);
     _textController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
+  Future<void> _loadCheckNumber() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // Modified line: Default value when loading from SharedPreferences is now 338
+      _checkNumber = prefs.getInt(_kCheckNumberKey) ?? 338;
+    });
+    _previewSelectedItems();
+  }
+
+  Future<void> _saveCheckNumber(int number) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kCheckNumberKey, number);
+  }
+
+
   void _filterHistories() {
-    String query = _searchController.text.toLowerCase();
+    final query = _searchController.text.toLowerCase();
     setState(() {
       _filteredHistories = widget.histories.where((item) {
         final name = (item['name'] ?? '').toString().toLowerCase();
         return name.contains(query);
       }).toList();
-      _selectedItems = List<bool>.filled(_filteredHistories.length, false);
+      _selectedItems = List<bool>.filled(_filteredHistories.length, false, growable: true);
     });
+    _previewSelectedItems();
   }
 
   Future<void> _checkPrinterAvailability() async {
@@ -60,285 +87,281 @@ class _PrinterPageState extends State<PrinterPage> {
       final bool isAvailable = await platform.invokeMethod('checkPrinterAvailability');
       setState(() {
         _isPrinterAvailable = isAvailable;
-        _printStatus = _isPrinterAvailable ? 'Printer mavjud' : 'Printer topilmadi';
+        _printStatus = _isPrinterAvailable ? 'Принтер уланган' : 'Принтер топилмади'; // O'zbek kirillcha
       });
     } catch (e) {
-      setState(() {
-        _printStatus = 'Printerni tekshirishda xato: $e';
-      });
-      print('Printer mavjudligini tekshirishda xato: $e');
+      _updateStatus('Принтер текширишда хатолик: $e', isError: true); // O'zbek kirillcha
     }
+  }
+
+  List<Map<String, dynamic>> _getSelectedHistories() {
+    List<Map<String, dynamic>> selected = [];
+    for (int i = 0; i < _filteredHistories.length; i++) {
+      if (_selectedItems.length > i && _selectedItems[i]) {
+        selected.add(_filteredHistories[i]);
+      }
+    }
+    return selected;
   }
 
   Future<void> _printSelectedHistories() async {
     if (!_isPrinterAvailable) {
-      setState(() {
-        _printStatus = 'Printer mavjud emas. Avval printerni ulanishini tekshiring.';
-      });
+      _updateStatus('Принтер уланмаган. Илтимос, уланишни текширинг.', isError: true); // O'zbek kirillcha
       return;
     }
 
-    List<Map<String, dynamic>> selectedHistories = [];
-    for (int i = 0; i < _selectedItems.length; i++) {
-      if (_selectedItems[i]) {
-        selectedHistories.add(_filteredHistories[i]);
-      }
-    }
+    final selectedHistories = _getSelectedHistories();
 
     if (selectedHistories.isEmpty) {
-      setState(() {
-        _printStatus = 'Iltimos, kamida bitta tarixiy elementni tanlang.';
-      });
+      _updateStatus('Чоп этиш учун маҳсулот танланмаган.', isError: true); // O'zbek kirillcha
       return;
     }
 
     if (_textController.text.isEmpty) {
-      setState(() {
-        _printStatus = 'Iltimos, chop etish uchun izoh kiriting. Izoh majburiy.';
-      });
+      _updateStatus('Илтимос, изоҳ киритинг. Бу майдон мажбурий.', isError: true); // O'zbek kirillcha
       return;
     }
 
     try {
       final profile = await esc_pos.CapabilityProfile.load();
       final generator = esc_pos.Generator(esc_pos.PaperSize.mm58, profile);
+      final bytes = _generateReceiptData(generator, selectedHistories);
 
-      for (var item in selectedHistories) {
-        List<int> bytes = [];
-        String formattedDateTime = 'N/A';
-        if (item['sana_vaqt'] != null) {
-          DateTime? originalDateTime = DateTime.tryParse(item['sana_vaqt'].toString());
-          if (originalDateTime != null) {
-            DateTime adjustedDateTime = originalDateTime.add(const Duration(hours: 5));
-            formattedDateTime = DateFormat('dd.MM.yyyy HH:mm').format(adjustedDateTime);
-          } else {
-            formattedDateTime = item['sana_vaqt'].toString();
-          }
-        }
+      await platform.invokeMethod('printData', {'data': Uint8List.fromList(bytes)});
 
-        bytes += generator.text('ALGORITM',
-            styles: const esc_pos.PosStyles(
-              align: esc_pos.PosAlign.center,
-              height: esc_pos.PosTextSize.size2,
-              width: esc_pos.PosTextSize.size2,
-              fontType: esc_pos.PosFontType.fontB,
-              bold: true,
-            ));
-        bytes += generator.text('-----------------------------',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center));
-        bytes += generator.text('Чек рақами: No.${checkNumber}',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Компания: Algoritm Group',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Маҳсулот: ${item['name'] ?? 'N/A'}',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Нарх: ${item['price'] ?? 0} som',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Тўлов суммаси: ${item['summa'] ?? 0} som',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Кассир: Rajabova Asem',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Вақт: $formattedDateTime',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('телефон рақами: +998905908445',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('Изоҳ: ${_textController.text}',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.text('-----------------------------',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center));
-        bytes += generator.text('Квитанцияни сақланг',
-            styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center, bold: true, fontType: esc_pos.PosFontType.fontB));
-        bytes += generator.feed(2);
-        bytes += generator.cut();
-
-        await platform.invokeMethod('printData', {'data': bytes});
-        checkNumber++;
-      }
-
-      setState(() {
-        _printStatus = 'Chop etish muvaffakiyatli amalga oshirildi!';
-        _selectedItems = List<bool>.filled(_filteredHistories.length, false);
-        _filterHistories();
-      });
+      _updateStatus('Муваффақиятли чоп этилди!', isSuccess: true); // O'zbek kirillcha
+      _postActionCleanup();
     } catch (e) {
-      setState(() {
-        _printStatus = 'Chop etish muwaffakiyatsiz tugadi: $e';
-      });
-      print('Chop etishda xato: $e');
+      _updateStatus('Чоп этишда хатолик: $e', isError: true); // O'zbek kirillcha
     }
   }
 
-  Future<void> _printCustomText() async {
-    if (!_isPrinterAvailable) {
-      setState(() {
-        _printStatus = 'Printer mavjud emas. Avval printerni ulanishini ta\'minlash.';
-      });
+  Future<void> _generateAndSavePdf() async {
+    final selectedHistories = _getSelectedHistories();
+
+    if (selectedHistories.isEmpty) {
+      _updateStatus('PDF яратиш учун маҳсулот танланмаган.', isError: true); // O'zbek kirillcha
       return;
     }
-
     if (_textController.text.isEmpty) {
-      setState(() {
-        _printStatus = 'Iltimos, chop etish uchun matn kiriting.';
-      });
-      return;
-    }
-
-    try {
-      final profile = await esc_pos.CapabilityProfile.load();
-      final generator = esc_pos.Generator(esc_pos.PaperSize.mm58, profile);
-
-      List<int> bytes = [];
-      bytes += generator.text(_textController.text,
-          styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, fontType: esc_pos.PosFontType.fontB));
-      bytes += generator.feed(2);
-      bytes += generator.cut();
-
-      await platform.invokeMethod('printData', {'data': bytes});
-
-      setState(() {
-        _printStatus = 'Maxsus matn muvaffakiyatli chop etildi!';
-        _textController.clear();
-      });
-    } catch (e) {
-      setState(() {
-        _printStatus = 'Maxsus matni chop etish muvaffakiyatsiz tugadi: $e';
-      });
-    }
-  }
-
-  Future<void> _generateAndSavePdf(List<Map<String, dynamic>> dataToPrint) async {
-    if (dataToPrint.isEmpty) {
-      setState(() {
-        _printStatus = 'Iltimos, PDF uchun kamida bitta tarixiy elementni tanlash.';
-      });
-      return;
-    }
-
-    if (_textController.text.isEmpty) {
-      setState(() {
-        _printStatus = 'Iltimos, PDF yaratish uchun izoh kiriting. Izoh majburiy.';
-      });
+      _updateStatus('Илтимос, PDF учун изоҳ киритинг. Бу мажбурий.', isError:true); // O'zbek kirillcha
       return;
     }
 
     final pdf = pw.Document();
-    const double mmToPoint = 2.83465;
-    const double pageWidthMm = 58.0;
-    const double pageHeightMm = 150.0;
-
-    pw.Font ttf;
+    pw.Font? ttf;
     try {
-      final fontData = await DefaultAssetBundle.of(context).load('assets/fonts/CharisSILB.ttf');
+      final fontData = await rootBundle.load('assets/fonts/CharisSILB.ttf');
       ttf = pw.Font.ttf(fontData);
     } catch (e) {
-      setState(() {
-        _printStatus = 'PDF uchun shrift yuklashda xato: $e. Shrift tugri joylashganligini va pubspec.yamlni tekshiring.';
-      });
-      print('PDF font loading error: $e');
+      _updateStatus('Шрифтни юклашда хато: $e', isError: true); // O'zbek kirillcha
       return;
     }
 
-    for (var item in dataToPrint) {
-      String formattedDateTime = 'N/A';
-      if (item['sana_vaqt'] != null) {
-        DateTime? originalDateTime = DateTime.tryParse(item['sana_vaqt'].toString());
-        if (originalDateTime != null) {
-          DateTime adjustedDateTime = originalDateTime.add(const Duration(hours: 5));
-          formattedDateTime = DateFormat('dd.MM.yyyy HH:mm').format(adjustedDateTime);
-        } else {
-          formattedDateTime = item['sana_vaqt'].toString();
-        }
-      }
+    final String currentDateTime = _formatCurrentDateTime();
+    final int totalSum = _calculateTotalSum(selectedHistories);
 
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat(pageWidthMm * mmToPoint, pageHeightMm * mmToPoint),
-          margin: const pw.EdgeInsets.all(5 * mmToPoint),
-          build: (pw.Context context) {
-            pw.Widget commentSection = pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Divider(),
-                pw.Text(
-                  'Изоҳ: ${_textController.text}',
-                  style: pw.TextStyle(font: ttf, fontSize: 9, fontWeight: pw.FontWeight.bold),
-                ),
-              ],
-            );
+    const PdfPageFormat pageFormat = PdfPageFormat(58 * PdfPageFormat.mm, double.infinity, marginAll: 6 * PdfPageFormat.mm);
 
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.SizedBox(height: 5),
-                pw.Center(
-                  child: pw.Text(
-                    'ALGORITM',
-                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, font: ttf),
-                  ),
+    pdf.addPage(
+      pw.Page(
+        pageFormat: pageFormat,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: double.infinity,
+                child: pw.Text(
+                  "ALGORITM", // O'zbek kirillcha
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(font: ttf, fontSize: 12, fontWeight: pw.FontWeight.bold),
                 ),
-                pw.Divider(),
-                pw.SizedBox(height: 5),
-                _buildPdfRow('Чек рақами:', 'No.${checkNumber}', ttf),
-                _buildPdfRow('Компания:', 'Algoritm Group', ttf),
-                _buildPdfRow('Маҳсулот:', item['name'] ?? 'N/A', ttf),
-                _buildPdfRow('Нарх:', '${item['price'] ?? 0} som', ttf),
-                _buildPdfRow('Тўлов суммасi:', '${item['summa'] ?? 0} som', ttf),
-                _buildPdfRow('Кассир:', 'Rajabova Asem', ttf),
-                _buildPdfRow('Вақт:', formattedDateTime, ttf),
-                _buildPdfRow('телефон рақами:', '+998905908445', ttf),
-                commentSection,
-                pw.Divider(),
-                pw.Center(
-                  child: pw.Text(
-                    'Квитанцияни сақланг',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: ttf, fontSize: 10),
-                  ),
+              ),
+              pw.SizedBox(height: 5),
+              pw.SizedBox(
+                width: double.infinity,
+                child: pw.Text(
+                    'Чек №${_checkNumber}', // O'zbek kirillcha
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(font: ttf, fontSize: 10, fontWeight: pw.FontWeight.bold)
                 ),
-                pw.SizedBox(height: 10),
-              ],
-            );
-          },
-        ),
-      );
-      checkNumber++;
+              ),
+              pw.Divider(height: 10, thickness: 1),
+              ...selectedHistories.map((item) => _buildPdfRow('${item['name'] ?? 'N/A'}', '${item['price'] ?? 0} сўм', ttf!)), // "so'm" -> "сўм"
+              pw.Divider(height: 10, thickness: 1),
+              _buildPdfRow('ЖАМИ:', '$totalSum сўм', ttf!, isTotal: true), // "UMUMIY:" -> "ЖАМИ:", "so'm" -> "сўм"
+              pw.SizedBox(height: 15),
+              pw.Text('Вақт: $currentDateTime', style: pw.TextStyle(font: ttf, fontSize: 8)), // "Vaqt:" -> "Вақт:"
+              pw.Text('Изоҳ: ${_textController.text}', style: pw.TextStyle(font: ttf, fontSize: 8)), // "Izoh:" -> "Изоҳ:"
+              pw.SizedBox(height: 10),
+              pw.Center(
+                  child: pw.Text("Харидингиз учун раҳмат!", style: pw.TextStyle(font: ttf, fontSize: 8, fontStyle: pw.FontStyle.italic)) // O'zbek kirillcha
+              )
+            ],
+          );
+        },
+      ),
+    );
+
+    try {
+      final output = await getTemporaryDirectory();
+      final fileName = "chek_raport_${DateTime.now().millisecondsSinceEpoch}.pdf";
+      final file = File("${output.path}/$fileName");
+      await file.writeAsBytes(await pdf.save());
+
+      _updateStatus('PDF файл муваффақиятли сақланди!', isSuccess: true); // O'zbek kirillcha
+      _postActionCleanup();
+      await OpenFilex.open(file.path);
+    } catch (e) {
+      _updateStatus('PDF файлини сақлашда ёки очишда хатолик: $e', isError: true); // O'zbek kirillcha
     }
-
-    final output = await getTemporaryDirectory();
-    final fileName = "chek_raport_${DateTime.now().millisecondsSinceEpoch}.pdf";
-    final file = File("${output.path}/$fileName");
-    await file.writeAsBytes(await pdf.save());
-
-    setState(() {
-      _printStatus = 'PDF muwaffaqiyatli saqlandi: $fileName';
-      _selectedItems = List<bool>.filled(_filteredHistories.length, false);
-      _filterHistories();
-    });
-
-    await OpenFilex.open(file.path);
   }
 
-  pw.Widget _buildPdfRow(String label, String value, pw.Font font) {
+  void _postActionCleanup() {
+    setState(() {
+      _checkNumber++;
+      _saveCheckNumber(_checkNumber);
+      _selectedItems = List<bool>.filled(_filteredHistories.length, false, growable: true);
+      _textController.clear();
+      _previewText = 'Олдиндан кўриш учун маҳсулот танланг...'; // O'zbek kirillcha
+    });
+  }
+
+  void _updateStatus(String message, {bool isError = false, bool isSuccess = false}) {
+    setState(() {
+      _printStatus = message;
+    });
+    if (isError) {
+      _showErrorDialog(message);
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Хатолик!'), // O'zbek kirillcha
+            ],
+          ),
+          content: Text(message),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('ОК'), // O'zbek kirillcha
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _generatePreviewText(List<Map<String, dynamic>> items) {
+    if (items.isEmpty) {
+      return 'Ҳеч нарса танланмаган.'; // O'zbek kirillcha
+    }
+    final buffer = StringBuffer();
+    final currentDateTime = _formatCurrentDateTime();
+    final totalSum = _calculateTotalSum(items);
+
+    buffer.writeln('ALGORITM'.padLeft(15)); // O'zbek kirillcha
+    buffer.writeln('ЧЕК №${_checkNumber + 1}'.padLeft(15)); // O'zbek kirillcha
+    buffer.writeln('--------------------------------');
+    for (final item in items) {
+      final name = item['name'] ?? 'N/A';
+      final price = item['price'] ?? 0;
+      buffer.writeln('${name.toString().padRight(18)} ${price.toString().padLeft(8)} сўм'); // "so'm" -> "сўм"
+    }
+    buffer.writeln('--------------------------------');
+    buffer.writeln('ЖАМИ СУММА: $totalSum сўм'.padLeft(15)); // O'zbek kirillcha, "so'm" -> "сўм"
+    buffer.writeln('Вақт: $currentDateTime'); // O'zbek kirillcha
+    if(_textController.text.isNotEmpty) {
+      buffer.writeln('Изоҳ: ${_textController.text}'); // O'zbek kirillcha
+    }
+    buffer.writeln('\nХаридингиз учун раҳмат!'.padLeft(15)); // O'zbek kirillcha
+    return buffer.toString();
+  }
+
+  void _previewSelectedItems() {
+    final selected = _getSelectedHistories();
+    setState(() {
+      _previewText = _generatePreviewText(selected);
+    });
+  }
+
+  int _calculateTotalSum(List<Map<String, dynamic>> items) {
+    return items.fold(0, (sum, item) => sum + (int.tryParse(item['price'].toString()) ?? 0));
+  }
+
+  String _formatCurrentDateTime() {
+    return DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
+  }
+
+  List<int> _generateReceiptData(esc_pos.Generator generator, List<Map<String, dynamic>> selectedHistories) {
+    List<int> bytes = [];
+    final String currentDateTime = _formatCurrentDateTime();
+    final int totalSum = _calculateTotalSum(selectedHistories);
+
+    bytes += generator.text('ALGORITM', styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center, bold: true, height: esc_pos.PosTextSize.size2, width: esc_pos.PosTextSize.size2)); // O'zbek kirillcha
+    bytes += generator.text('Чек №${_checkNumber}', styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center, bold: true)); // O'zbek kirillcha
+    bytes += generator.hr();
+    for (var item in selectedHistories) {
+      bytes += generator.row([
+        esc_pos.PosColumn(
+          text: '${item['name'] ?? 'N/A'}',
+          width: 8,
+          styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left),
+        ),
+        esc_pos.PosColumn(
+          text: '${item['price'] ?? 0} сўм', // "so'm" -> "сўм"
+          width: 4,
+          styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.right),
+        ),
+      ]);
+    }
+    bytes += generator.hr();
+    bytes += generator.text('Жами: $totalSum сўм', styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.right, bold: true, height: esc_pos.PosTextSize.size2, width: esc_pos.PosTextSize.size2)); // "Umumiy:" -> "Жами:", "so'm" -> "сўм"
+    bytes += generator.text('Вақт: $currentDateTime', styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left, height: esc_pos.PosTextSize.size1, width: esc_pos.PosTextSize.size1)); // O'zbek kirillcha
+    if(_textController.text.isNotEmpty) {
+      bytes += generator.text('Изоҳ: ${_textController.text}', styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.left)); // O'zbek kirillcha
+    }
+    bytes += generator.feed(1);
+    bytes += generator.text('Харидингиз учун раҳмат!', styles: const esc_pos.PosStyles(align: esc_pos.PosAlign.center)); // O'zbek kirillcha
+    bytes += generator.feed(2);
+    bytes += generator.cut();
+    return bytes;
+  }
+
+  pw.Widget _buildPdfRow(String label, String value, pw.Font font, {bool isTotal = false}) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1),
+      padding: const pw.EdgeInsets.symmetric(vertical: 1.0),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.SizedBox(
-            width: 25 * 2.83465,
-            child: pw.Text(
-              '$label:',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, font: font, fontSize: 9),
-              textAlign: pw.TextAlign.left,
-            ),
-          ),
-          pw.SizedBox(width: 2 * 2.83465),
           pw.Expanded(
-            child: pw.Text(
+              child: pw.Text(
+                label,
+                style: pw.TextStyle(
+                    font: font,
+                    fontSize: isTotal ? 9 : 8,
+                    fontWeight: isTotal ? pw.FontWeight.bold : pw.FontWeight.normal
+                ),
+              )
+          ),
+          pw.Text(
               value,
-              style: pw.TextStyle(font: font, fontSize: 9),
-              textAlign: pw.TextAlign.right,
-            ),
+              style: pw.TextStyle(
+                  font: font,
+                  fontSize: isTotal ? 9 : 8,
+                  fontWeight: isTotal ? pw.FontWeight.bold : pw.FontWeight.normal
+              )
           ),
         ],
       ),
@@ -347,180 +370,276 @@ class _PrinterPageState extends State<PrinterPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: <ShortcutActivator, Intent>{
-        const SingleActivator(LogicalKeyboardKey.keyP, control: true): const PrintIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          PrintIntent: CallbackAction<PrintIntent>(
-            onInvoke: (intent) => _printSelectedHistories(),
-          ),
-        },
-        child: Focus(
-          autofocus: true,
-          child: Scaffold(
-
-            body: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    elevation: 4,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10.0),
-                      child: Column(
-                        children: [
-                          const Text(
-                            'Chop uchun tarixiy mahsulotlarni tanlash (Ctrl + P bilan yozishlarni chop etish)',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            _printStatus,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: _printStatus.contains('muvaffaqiyatli')
-                                  ? Colors.green
-                                  : _printStatus.contains('xato') || _printStatus.contains('topilmadi') || _printStatus.contains('majburiy')
-                                  ? Colors.red
-                                  : Colors.blue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+    return Scaffold(
+      backgroundColor: Colors.grey[200],
+      body: Row(
+        children: [
+          _buildPreviewPanel(),
+          Expanded(
+            child: Shortcuts(
+              shortcuts: <ShortcutActivator, Intent>{
+                const SingleActivator(LogicalKeyboardKey.keyP, control: true): const PrintIntent(),
+              },
+              child: Actions(
+                actions: <Type, Action<Intent>>{
+                  PrintIntent: CallbackAction<PrintIntent>(onInvoke: (intent) => _printSelectedHistories()),
+                },
+                child: Focus(
+                  autofocus: true,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                    child: _buildControlsPanel(),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10.0),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        labelText: 'Mahsulot nomini qidirish',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: _filteredHistories.length,
-                      itemBuilder: (context, index) {
-                        final item = _filteredHistories[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 0),
-                          elevation: 2,
-                          color: _selectedItems[index] ? Colors.blueAccent.withOpacity(0.1) : null,
-                          child: CheckboxListTile(
-                            title: Text(
-                              '${item['name'] ?? 'N/A'} - ${item['summa'] ?? 0} so‘m',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            subtitle: Text(
-                              'Миқдор: ${item['quantity'] ?? 0}, Нарх: ${item['price'] ?? 0} so‘m',
-                              style: const TextStyle(fontSize: 14, color: Colors.grey),
-                            ),
-                            value: _selectedItems[index],
-                            onChanged: (bool? value) {
-                              setState(() {
-                                _selectedItems[index] = value ?? false;
-                              });
-                            },
-                            activeColor: Colors.blueAccent,
-                            checkColor: Colors.white,
-                            tileColor: _selectedItems[index] ? Colors.blueAccent.withOpacity(0.1) : null,
-                            controlAffinity: ListTileControlAffinity.leading,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _textController,
-                    decoration: InputDecoration(
-                      labelText: 'Chop etish uchun izoh kiriting (Majburiy)',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                    ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _printCustomText,
-                          icon: const Icon(Icons.print),
-                          label: const Text('Mahsus matni chop etish'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueAccent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _printSelectedHistories,
-                          icon: const Icon(Icons.receipt),
-                          label: const Text('Tanlanganlarni chop etish'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      List<Map<String, dynamic>> selectedHistories = [];
-                      for (int i = 0; i < _selectedItems.length; i++) {
-                        if (_selectedItems[i]) {
-                          selectedHistories.add(_filteredHistories[i]);
-                        }
-                      }
-                      await _generateAndSavePdf(selectedHistories);
-                    },
-                    icon: const Icon(Icons.picture_as_pdf),
-                    label: const Text('Tanlanganlarni PDF qilib saqlang'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
+                ),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControlsPanel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildStatusCard(),
+        const SizedBox(height: 16),
+        _buildSearchField(),
+        const SizedBox(height: 16),
+        _buildHistoryList(),
+        const SizedBox(height: 16),
+        _buildCommentField(),
+        const SizedBox(height: 16),
+        _buildActionButtons(),
+      ],
+    );
+  }
+
+  Widget _buildStatusCard() {
+    bool isSuccess = _printStatus.contains('муваффақиятли') || _printStatus.contains('уланган'); // O'zbek kirillcha
+    bool isError = _printStatus.contains('хато') || _printStatus.contains('топилмади') || _printStatus.contains('мажбурий'); // O'zbek kirillcha
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Text(
+              'Босиб чиқариш панели', // O'zbek kirillcha
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey[800]),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  isSuccess ? Icons.check_circle_outline : isError ? Icons.error_outline : Icons.info_outline,
+                  color: isSuccess ? Colors.green.shade600 : isError ? Colors.red.shade600 : Colors.blue.shade600,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _printStatus,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isSuccess ? Colors.green.shade700 : isError ? Colors.red.shade700 : Colors.blue.shade700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        labelText: 'Маҳсулотларни қидириш', // O'zbek kirillcha
+        prefixIcon: const Icon(Icons.search, color: Colors.grey),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      ),
+    );
+  }
+
+  Widget _buildHistoryList() {
+    return Expanded(
+      child: Container(
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300, width: 1.0)
+        ),
+        child: _filteredHistories.isEmpty
+            ? Center(
+            child: Text(
+              "Маҳсулотлар топилмади", // O'zbek kirillcha
+              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+            ))
+            : ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          itemCount: _filteredHistories.length,
+          itemBuilder: (context, index) {
+            final item = _filteredHistories[index];
+            final isSelected = _selectedItems.length > index && _selectedItems[index];
+            return Material(
+              color: Colors.transparent,
+              child: CheckboxListTile(
+                title: Text(
+                  item['name'] ?? 'N/A',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? Theme.of(context).primaryColor : Colors.black87,
+                  ),
+                ),
+                subtitle: Text('Миқдор: ${item['quantity'] ?? 0}, Нарх: ${item['price'] ?? 0} сўм'), // O'zbek kirillcha, "so'm" -> "сўм"
+                value: isSelected,
+                onChanged: (bool? value) {
+                  setState(() {
+                    if(_selectedItems.length > index) {
+                      _selectedItems[index] = value ?? false;
+                    }
+                  });
+                  _previewSelectedItems();
+                },
+                activeColor: Theme.of(context).primaryColor,
+                tileColor: isSelected ? Theme.of(context).primaryColor.withOpacity(0.08) : null,
+                controlAffinity: ListTileControlAffinity.leading,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentField() {
+    return TextField(
+      controller: _textController,
+      decoration: InputDecoration(
+        labelText: 'Изоҳ (Мажбурий)', // O'zbek kirillcha
+        hintText: 'Чоп этиш ёки PDF учун изоҳ киритинг', // O'zbek kirillcha
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      ),
+      maxLines: 2,
+      minLines: 1,
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _printSelectedHistories,
+                icon: const Icon(Icons.print_outlined, size: 20),
+                label: const Text('Чоп этиш', style: TextStyle(fontSize: 16)), // O'zbek kirillcha
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 3,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _generateAndSavePdf,
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                label: const Text('PDF сақлаш', style: TextStyle(fontSize: 16)), // O'zbek kirillcha
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreviewPanel() {
+    return Container(
+      width: 320,
+      margin: const EdgeInsets.fromLTRB(16, 16, 0, 16),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              spreadRadius: 2,
+              blurRadius: 5,
+              offset: const Offset(0, 3),
+            ),
+          ],
+          border: Border.all(color: Colors.grey.shade300)
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Icon(Icons.receipt_long_outlined, color: Colors.grey[700]),
+                const SizedBox(width: 8),
+                Text(
+                  "Чекни кўриш", // O'zbek kirillcha
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800]
+                  ),
+                )
+              ],
+            ),
+          ),
+          const Divider(indent: 16, endIndent: 16),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                _previewText,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  color: Colors.black87,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -36,6 +36,7 @@ dependencies:
   path_provider: ^2.1.5 # Fayllarni saqlash uchun yo'lni topishga yordam beradi
   open_filex: ^4.3.2
   cupertino_icons: ^1.0.8
+  shared_preferences: ^2.2.3
   http: ^1.2.1
   connectivity_plus: ^6.1.4
   esc_pos_utils_plus: ^2.0.4  # For generating ESC/POS commands
