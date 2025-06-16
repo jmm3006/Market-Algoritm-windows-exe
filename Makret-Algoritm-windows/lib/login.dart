@@ -19,7 +19,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  final String baseUrl = "https://script.google.com/macros/s/AKfycbz2g5F_bq09I9p053_uL0o9DCD6E96dc3dB8e-37YLL6C3zfL0XkxewaDddgCFsHyfo/exec";
+  final String baseUrl = "";
 
   List<Map<String, String>> _usersData = [];
 

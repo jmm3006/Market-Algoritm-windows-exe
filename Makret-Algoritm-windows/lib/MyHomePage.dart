@@ -42,7 +42,7 @@ class _MyHomePageState extends State<MyHomePage> {
   double _totalSelectedAmount = 0.0;
 
   final String baseUrl =
-      "https://script.google.com/macros/s/AKfycbz2g5F_bq09I9p053_uL0o9DCD6E96dc3dB8e-37YLL6C3zfL0XkxewaDddgCFsHyfo/exec";
+      "";
 
   String get marketsApiUrl => "$baseUrl?action=getMarkets";
 
@@ -172,7 +172,7 @@ class _MyHomePageState extends State<MyHomePage> {
               _buildPdfDetailRow('Изоҳ:', _commentController.text, ttf!),
               pw.Divider(height: 10, thickness: 1),
               _buildPdfRow('ЖАМИ:', '$totalSum сўм', ttf!, isTotal: true),
-              pw.SizedBox(height: 10),
+              pw.SizedBox(height: 5),
               pw.Center(
                 child: pw.Text(
                   "Харидингиз учун раҳмат!",
@@ -602,7 +602,7 @@ class _MyHomePageState extends State<MyHomePage> {
               children: [
                 if (gifPath.isNotEmpty)
                   Image.asset(gifPath, height: 80, width: 80),
-                const SizedBox(height: 10),
+                const SizedBox(height: 5),
                 Text(
                   title,
                   style: TextStyle(
@@ -814,7 +814,7 @@ class _MyHomePageState extends State<MyHomePage> {
           flex: 3,
           child: Column(
             children: [
-              const SizedBox(height: 10),
+              const SizedBox(height: 5),
               const Text(
                 'Mahsulotlar',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -1157,7 +1157,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget historyPage() {
     return Column(
       children: [
-        const SizedBox(height: 10),
+        const SizedBox(height: 5),
         const Text(
           'Sotuv Tarixi',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -1265,7 +1265,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget adminPage() {
     return Column(
       children: [
-        const SizedBox(height: 10),
+        const SizedBox(height: 5),
         const Text(
           'Admin Panel',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -1287,7 +1287,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget printerPage() {
     return Column(
       children: [
-        const SizedBox(height: 10),
+        const SizedBox(height: 5),
         const Text(
           'Printer',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -1362,7 +1362,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     return Column(
       children: [
-        const SizedBox(height: 10),
+        const SizedBox(height: 5),
         const Text(
           'Umumiy Statistikalar',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.deepPurple),
@@ -1376,28 +1376,28 @@ class _MyHomePageState extends State<MyHomePage> {
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 const Text(
-                  'Mavjud Mahsulotlar Bo\'yicha (Inventar Qiymati):',
+                  'Mavjud Mahsulotlar Bo\'yicha:',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
                 ),
                 const SizedBox(height: 8),
                 _buildStatRow(
-                  label: 'Inventar Xarid Narxi:',
+                  label: 'Xarid Narxi:',
                   value: overallMarketValueBought,
                   color: Colors.orange.shade700,
                   icon: Icons.attach_money,
                 ),
                 const Divider(height: 16, thickness: 1),
                 _buildStatRow(
-                  label: 'Inventar Sotish Narxi:',
+                  label: 'Sotish Narxi:',
                   value: overallMarketValueSelling,
                   color: Colors.purple.shade700,
                   icon: Icons.sell,
                 ),
                 const Divider(height: 16, thickness: 1),
                 _buildStatRow(
-                  label: 'Potensial Foyda (Inventar):',
+                  label: 'Potensial Foyda:',
                   value: overallMarketPotentialProfit,
                   color: Colors.teal.shade700,
                   icon: Icons.insights,
@@ -1407,13 +1407,13 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 5),
 
         if (dailyTransactions.isEmpty)
           Expanded(
             child: Column(
               children: [
-                const SizedBox(height: 10),
+                const SizedBox(height: 5),
                 const Text(
                   'Kunlik Daromad',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
