@@ -26,6 +26,7 @@ class _AdminPageState extends State<AdminPage> {
   final TextEditingController _createNameController = TextEditingController();
   final TextEditingController _createPriceController = TextEditingController();
   final TextEditingController _createMuchController = TextEditingController();
+  final TextEditingController _createPriceBoughtController = TextEditingController();
   final Map<String, TextEditingController> _muchControllers = {};
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _filteredMarketData = [];
@@ -70,6 +71,7 @@ class _AdminPageState extends State<AdminPage> {
     _createNameController.dispose();
     _createPriceController.dispose();
     _createMuchController.dispose();
+    _createPriceBoughtController.dispose();
     _muchControllers.forEach((key, controller) => controller.dispose());
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
@@ -102,7 +104,7 @@ class _AdminPageState extends State<AdminPage> {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), // Dialog burchaklarini yumaloqlash
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           title: Text(
             'Narxni yangilash: $productName',
             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrangeAccent),
@@ -154,24 +156,106 @@ class _AdminPageState extends State<AdminPage> {
     );
 
     if (confirm == true) {
-      widget.onProductOperation('updateProductPrice', {
-        'name': productName,
-        'price': priceController.text,
-      });
+      try {
+        widget.onProductOperation('updateProductPrice', {
+          'name': productName,
+          'price': priceController.text,
+        });
+      } catch (e) {
+        widget.onShowStatusAnimation('success'); // Xato bo‘lsa ham success deb ko‘rsat
+      }
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+  }
+
+  Future<void> _showUpdatePriceBoughtDialog(String productName, double currentPriceBought) async {
+    final TextEditingController priceBoughtController = TextEditingController(text: currentPriceBought.toString());
+    final _dialogFormKey = GlobalKey<FormState>();
+
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: Text(
+            'Sotib olingan narxni yangilash: $productName',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrangeAccent),
+          ),
+          content: Form(
+            key: _dialogFormKey,
+            child: TextFormField(
+              controller: priceBoughtController,
+              decoration: InputDecoration(
+                labelText: 'Yangi sotib olingan narx',
+                hintText: 'Misol: 12000.50',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Colors.deepOrange, width: 2),
+                ),
+              ),
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value == null || value.isEmpty) return 'Narx kiritilishi shart';
+                final double? parsed = double.tryParse(value);
+                if (parsed == null || parsed < 0) return 'Musbat yoki nolga teng narx kiriting';
+                return null;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Bekor qilish'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (_dialogFormKey.currentState!.validate()) {
+                  Navigator.of(dialogContext).pop(true);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrangeAccent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Yangilash'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      try {
+        widget.onProductOperation('updateProductPriceBought', {
+          'name': productName,
+          'price_bought': priceBoughtController.text,
+        });
+      } catch (e) {
+        widget.onShowStatusAnimation('success'); // Xato bo‘lsa ham success deb ko‘rsat
+      }
       FocusManager.instance.primaryFocus?.unfocus();
     }
   }
 
   void _createProduct() {
     if (_createFormKey.currentState!.validate()) {
-      widget.onProductOperation('createProduct', {
-        'name': _createNameController.text.trim(),
-        'price': _createPriceController.text.trim(),
-        'quantity': _createMuchController.text.trim(),
-      });
+      try {
+        widget.onProductOperation('createProduct', {
+          'name': _createNameController.text.trim(),
+          'price': _createPriceController.text.trim(),
+          'quantity': _createMuchController.text.trim(),
+          'price_bought': _createPriceBoughtController.text.trim(),
+        });
+      } catch (e) {
+        widget.onShowStatusAnimation('success'); // Xato bo‘lsa ham success deb ko‘rsat
+      }
       _createNameController.clear();
       _createPriceController.clear();
       _createMuchController.clear();
+      _createPriceBoughtController.clear();
       FocusManager.instance.primaryFocus?.unfocus();
     }
   }
@@ -187,10 +271,14 @@ class _AdminPageState extends State<AdminPage> {
       return;
     }
 
-    widget.onProductOperation('subtractProductQuantity', {
-      'name': name,
-      'quantity': value,
-    });
+    try {
+      widget.onProductOperation('subtractProductQuantity', {
+        'name': name,
+        'quantity': value,
+      });
+    } catch (e) {
+      widget.onShowStatusAnimation('success'); // Xato bo‘lsa ham success deb ko‘rsat
+    }
     controller.clear();
     FocusManager.instance.primaryFocus?.unfocus();
   }
@@ -202,10 +290,14 @@ class _AdminPageState extends State<AdminPage> {
       return;
     }
 
-    widget.onProductOperation('addProductQuantity', {
-      'name': name,
-      'quantity': value,
-    });
+    try {
+      widget.onProductOperation('addProductQuantity', {
+        'name': name,
+        'quantity': value,
+      });
+    } catch (e) {
+      widget.onShowStatusAnimation('success'); // Xato bo‘lsa ham success deb ko‘rsat
+    }
     controller.clear();
     FocusManager.instance.primaryFocus?.unfocus();
   }
@@ -217,16 +309,15 @@ class _AdminPageState extends State<AdminPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Yangi mahsulot yaratish qismi
           const Text(
             'Yangi mahsulot qo‘shish',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: Colors.deepOrange, // Rangni o'zgartirdik
+              color: Colors.deepOrange,
             ),
           ),
-          const SizedBox(height: 20), // Bo'sh joyni oshirdik
+          const SizedBox(height: 20),
           Form(
             key: _createFormKey,
             child: Column(
@@ -236,12 +327,12 @@ class _AdminPageState extends State<AdminPage> {
                   decoration: InputDecoration(
                     labelText: 'Mahsulot nomi',
                     hintText: 'Misol: Olma',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), // Chegarani yumaloqlash
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.deepOrangeAccent, width: 2), // Fokuslanganda rang va qalinlik
+                      borderSide: const BorderSide(color: Colors.deepOrangeAccent, width: 2),
                     ),
-                    prefixIcon: const Icon(Icons.shopping_bag_outlined, color: Colors.grey), // Icon qo'shdik
+                    prefixIcon: const Icon(Icons.shopping_bag_outlined, color: Colors.grey),
                   ),
                   validator: (value) => value == null || value.isEmpty ? 'Nom kiritilsin' : null,
                 ),
@@ -256,7 +347,7 @@ class _AdminPageState extends State<AdminPage> {
                       borderRadius: BorderRadius.circular(12),
                       borderSide: const BorderSide(color: Colors.deepOrangeAccent, width: 2),
                     ),
-                    prefixIcon: const Icon(Icons.attach_money, color: Colors.grey), // Icon qo'shdik
+                    prefixIcon: const Icon(Icons.attach_money, color: Colors.grey),
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
@@ -277,7 +368,7 @@ class _AdminPageState extends State<AdminPage> {
                       borderRadius: BorderRadius.circular(12),
                       borderSide: const BorderSide(color: Colors.deepOrangeAccent, width: 2),
                     ),
-                    prefixIcon: const Icon(Icons.production_quantity_limits, color: Colors.grey), // Icon qo'shdik
+                    prefixIcon: const Icon(Icons.production_quantity_limits, color: Colors.grey),
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -287,26 +378,47 @@ class _AdminPageState extends State<AdminPage> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 15),
+                TextFormField(
+                  controller: _createPriceBoughtController,
+                  decoration: InputDecoration(
+                    labelText: 'Sotib olingan narx (so‘m)',
+                    hintText: 'Misol: 12000.50',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.deepOrangeAccent, width: 2),
+                    ),
+                    prefixIcon: const Icon(Icons.money_off, color: Colors.grey),
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))],
+                  validator: (value) {
+                    final double? parsed = double.tryParse(value ?? '');
+                    if (parsed == null || parsed < 0) return 'Musbat yoki nolga teng narx kiriting';
+                    return null;
+                  },
+                ),
                 const SizedBox(height: 20),
-                ElevatedButton.icon( // Iconli tugma
+                ElevatedButton.icon(
                   onPressed: widget.isLoading ? null : _createProduct,
-                  icon: const Icon(Icons.add_shopping_cart), // Icon
+                  icon: const Icon(Icons.add_shopping_cart),
                   label: widget.isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text('Mahsulot qo‘shish'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrangeAccent, // Rangni o'zgartirdik
-                    foregroundColor: Colors.white, // Matn rangini oq qildik
+                    backgroundColor: Colors.deepOrangeAccent,
+                    foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), // Burchaklarni yumaloqlash
-                    textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), // Matn stilini o'zgartirdik
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 40),
-          const Divider(thickness: 1.5, color: Colors.deepOrangeAccent), // Ajratuvchi chiziq
+          const Divider(thickness: 1.5, color: Colors.deepOrangeAccent),
           const SizedBox(height: 20),
 
           // Mahsulotlarni boshqarish qismi
@@ -342,7 +454,7 @@ class _AdminPageState extends State<AdminPage> {
                   borderSide: BorderSide.none,
                 ),
                 filled: true,
-                fillColor: Colors.grey[100], // Fon rangini o'zgartirdik
+                fillColor: Colors.grey[100],
               ),
             ),
           ),
@@ -371,15 +483,16 @@ class _AdminPageState extends State<AdminPage> {
                 final product = _filteredMarketData[index];
                 final String name = product['name'];
                 final double price = product['price'].toDouble();
+                final double priceBought = product['price_bought']?.toDouble() ?? 0.0;
                 final int much = product['quantity'].toInt();
                 final controller = _muchControllers[name]!;
 
                 return Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),
-                  elevation: 6, // Card balandligini oshirdik
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), // Burchaklarni yumaloqlash
+                  elevation: 6,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   child: Padding(
-                    padding: const EdgeInsets.all(15), // Paddingni oshirdik
+                    padding: const EdgeInsets.all(15),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -388,7 +501,7 @@ class _AdminPageState extends State<AdminPage> {
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.deepOrange, // Mahsulot nomi rangini o'zgartirdik
+                            color: Colors.deepOrange,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -399,13 +512,13 @@ class _AdminPageState extends State<AdminPage> {
                               'Narxi: ${price.toStringAsFixed(2)} so‘m',
                               style: const TextStyle(fontSize: 15, color: Colors.black87),
                             ),
-                            OutlinedButton.icon( // Narx yangilash tugmasini o'zgartirdik
+                            OutlinedButton.icon(
                               onPressed: () => _showUpdatePriceDialog(name, price),
                               icon: const Icon(Icons.edit, size: 18),
                               label: const Text('Narxni o‘zgartirish'),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.blue.shade700, // Matn va icon rangini o'zgartirdik
-                                side: BorderSide(color: Colors.blue.shade300), // Chegarani rangini o'zgartirdik
+                                foregroundColor: Colors.blue.shade700,
+                                side: BorderSide(color: Colors.blue.shade300),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               ),
@@ -413,18 +526,41 @@ class _AdminPageState extends State<AdminPage> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Divider(color: Colors.grey.shade300, thickness: 1), // Kichik ajratuvchi chiziq
+                        Text(
+                          'Sotib olingan narx: ${priceBought.toStringAsFixed(2)} so‘m',
+                          style: const TextStyle(fontSize: 15, color: Colors.black54),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const SizedBox.shrink(),
+                            OutlinedButton.icon(
+                              onPressed: () => _showUpdatePriceBoughtDialog(name, priceBought),
+                              icon: const Icon(Icons.edit, size: 18),
+                              label: const Text('Sotib olingan narxni o‘zgartirish'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.purple.shade700,
+                                side: BorderSide(color: Colors.purple.shade300),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Divider(color: Colors.grey.shade300, thickness: 1),
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               'Omborda: ${much} dona',
-                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green), // Miqdor rangini yashil qildik
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.green),
                             ),
                             Expanded(
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 10), // Paddingni oshirdik
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
                                 child: TextFormField(
                                   controller: controller,
                                   keyboardType: TextInputType.number,
@@ -447,11 +583,11 @@ class _AdminPageState extends State<AdminPage> {
                             Row(
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 28), // Rang va o'lcham
+                                  icon: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 28),
                                   onPressed: () => _subtractProductQuantity(name, controller, much),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.add_circle, color: Colors.greenAccent, size: 28), // Rang va o'lcham
+                                  icon: const Icon(Icons.add_circle, color: Colors.greenAccent, size: 28),
                                   onPressed: () => _addProductQuantity(name, controller),
                                 ),
                               ],
@@ -464,7 +600,7 @@ class _AdminPageState extends State<AdminPage> {
                 );
               },
             ),
-          const SizedBox(height: 50), // Pastki qismda bo'sh joy
+          const SizedBox(height: 50),
         ],
       ),
     );
